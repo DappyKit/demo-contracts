@@ -12,9 +12,15 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@opengsn/cli": "^3.0.0-beta.6",
+    "@opengsn/contracts": "^3.0.0-beta.6",
+    "@opengsn/dev": "^3.0.0-beta.6",
+    "@opengsn/provider": "^3.0.0-beta.6",
+    "@openzeppelin/contracts": "^4.9.2",
     "@typechain/truffle-v5": "^8.0.6",
     "@types/chai": "^4.3.5",
     "@types/mocha": "^10.0.1",
-    "@types/node": "^20.4.5"
+    "@types/node": "^20.4.5",
+    "web3": "^4.0.3"
   }
 }

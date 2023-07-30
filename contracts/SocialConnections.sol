@@ -1,132 +1,140 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity 0.8.6;
+
+import "@opengsn/contracts/src/ERC2771Recipient.sol";
 
 /**
  * @title SocialConnections
  * @dev Contract to manage social connections (following, followers) and permissions for MetaTransactions
  */
-contract SocialConnections {
+contract SocialConnections is ERC2771Recipient {
 
+    /**
+     * @dev Represents a user with their social connections and a nonce.
+     * Each user has a list of addresses they are following and their followers.
+     * We also track the relationships in mappings for quick lookups.
+     * Nonce is a placeholder for potential future use.
+     */
     struct User {
         address[] following;
         address[] followers;
         mapping(address => bool) isFollowing;
         mapping(address => bool) isFollowedBy;
-        address[] allowedMetaContracts;
-        mapping(address => bool) isAllowedMetaContract;
+        uint256 nonce;
     }
 
+    /**
+     * @dev Mapping of user addresses to User structs.
+     */
     mapping(address => User) private users;
 
+    /**
+     * @dev Event emitted when a user starts following another user.
+     */
     event Follow(address indexed follower, address indexed following);
-    event Unfollow(address indexed follower, address indexed following);
-    event AllowedMetaContractAdded(address indexed user, address indexed metaContract);
-    event AllowedMetaContractRemoved(address indexed user, address indexed metaContract);
 
     /**
-     * @notice A user follows another user or multiple users
+     * @dev Event emitted when a user stops following another user.
+     */
+    event Unfollow(address indexed follower, address indexed following);
+
+    /**
+     * @dev Constructs the contract, setting the trusted forwarder for meta transactions.
+     * @param forwarder Trusted forwarder address
+     */
+    constructor(address forwarder) {
+        _setTrustedForwarder(forwarder);
+    }
+
+    /**
+     * @notice Allows a user to follow one or multiple users
      * @param usersToFollow The address of the user(s) to follow
      */
     function follow(address[] memory usersToFollow) public {
+        address msgSender = _msgSender();
         for (uint256 i = 0; i < usersToFollow.length; i++) {
             address userToFollow = usersToFollow[i];
-            require(msg.sender != userToFollow, "Cannot follow yourself");
-            require(!users[msg.sender].isFollowing[userToFollow], "Already following");
 
-            users[msg.sender].following.push(userToFollow);
-            users[msg.sender].isFollowing[userToFollow] = true;
-            users[userToFollow].followers.push(msg.sender);
-            users[userToFollow].isFollowedBy[msg.sender] = true;
+            require(msgSender != userToFollow, "Cannot follow yourself");
+            require(!users[msgSender].isFollowing[userToFollow], "Already following");
 
-            emit Follow(msg.sender, userToFollow);
+            users[msgSender].following.push(userToFollow);
+            users[msgSender].isFollowing[userToFollow] = true;
+            users[userToFollow].followers.push(msgSender);
+            users[userToFollow].isFollowedBy[msgSender] = true;
+
+            emit Follow(msgSender, userToFollow);
         }
     }
 
     /**
-     * @notice A user unfollows another user or multiple users
+     * @notice Allows a user to unfollow one or multiple users
      * @param usersToUnfollow The address of the user(s) to unfollow
      */
     function unfollow(address[] memory usersToUnfollow) public {
+        address msgSender = _msgSender();
         for (uint256 i = 0; i < usersToUnfollow.length; i++) {
             address userToUnfollow = usersToUnfollow[i];
-            require(users[msg.sender].isFollowing[userToUnfollow], "Not following this user");
 
-            removeAddressFromArray(users[msg.sender].following, userToUnfollow);
-            users[msg.sender].isFollowing[userToUnfollow] = false;
-            removeAddressFromArray(users[userToUnfollow].followers, msg.sender);
-            users[userToUnfollow].isFollowedBy[msg.sender] = false;
+            require(users[msgSender].isFollowing[userToUnfollow], "Not following this user");
 
-            emit Unfollow(msg.sender, userToUnfollow);
+            removeAddressFromArray(users[msgSender].following, userToUnfollow);
+            users[msgSender].isFollowing[userToUnfollow] = false;
+            removeAddressFromArray(users[userToUnfollow].followers, msgSender);
+            users[userToUnfollow].isFollowedBy[msgSender] = false;
+
+            emit Unfollow(msgSender, userToUnfollow);
         }
     }
 
     /**
-     * @notice A user adds a meta contract to their allowed list
-     * @param metaContracts The address of the meta contract(s) to add
+     * @notice Allows a user to unfollow all users they're currently following
      */
-    function addAllowedMetaContracts(address[] memory metaContracts) public {
-        for (uint256 i = 0; i < metaContracts.length; i++) {
-            address metaContract = metaContracts[i];
-            require(msg.sender != metaContract, "Cannot add yourself");
-            require(!users[msg.sender].isAllowedMetaContract[metaContract], "Already added");
+    function unfollowAll() public {
+        address msgSender = _msgSender();
+        for (uint256 i = users[msgSender].following.length; i > 0; i--) {
+            address userToUnfollow = users[msgSender].following[i - 1];
 
-            users[msg.sender].allowedMetaContracts.push(metaContract);
-            users[msg.sender].isAllowedMetaContract[metaContract] = true;
+            users[msgSender].following.pop();
+            users[msgSender].isFollowing[userToUnfollow] = false;
+            removeAddressFromArray(users[userToUnfollow].followers, msgSender);
+            users[userToUnfollow].isFollowedBy[msgSender] = false;
 
-            emit AllowedMetaContractAdded(msg.sender, metaContract);
+            emit Unfollow(msgSender, userToUnfollow);
         }
     }
 
     /**
-     * @notice A user removes a meta contract from their allowed list
-     * @param metaContracts The address of the meta contract(s) to remove
-     */
-    function removeAllowedMetaContracts(address[] memory metaContracts) public {
-        for (uint256 i = 0; i < metaContracts.length; i++) {
-            address metaContract = metaContracts[i];
-            require(users[msg.sender].isAllowedMetaContract[metaContract], "Not added");
-
-            removeAddressFromArray(users[msg.sender].allowedMetaContracts, metaContract);
-            users[msg.sender].isAllowedMetaContract[metaContract] = false;
-
-            emit AllowedMetaContractRemoved(msg.sender, metaContract);
-        }
-    }
-
-    /**
-     * @notice A user removes all followers
-     */
-    function removeAllFollowers() public {
-        for (uint256 i = 0; i < users[msg.sender].followers.length; i++) {
-            address follower = users[msg.sender].followers[i];
-            users[follower].isFollowing[msg.sender] = false;
-            removeAddressFromArray(users[follower].following, msg.sender);
-        }
-        delete users[msg.sender].followers;
-    }
-
-    /**
-     * @notice A user removes all allowed meta contracts
-     */
-    function removeAllAllowedMetaContracts() public {
-        for (uint256 i = 0; i < users[msg.sender].allowedMetaContracts.length; i++) {
-            delete users[msg.sender].isAllowedMetaContract[users[msg.sender].allowedMetaContracts[i]];
-        }
-        delete users[msg.sender].allowedMetaContracts;
-    }
-
-    /**
-     * @dev Helper function to remove an address from an array
+     * @dev Removes an address from an array in storage.
+     * This is a helper function to manage lists of followers and following.
      * @param array The array to remove from
      * @param toRemove The address to remove
      */
     function removeAddressFromArray(address[] storage array, address toRemove) private {
-        for(uint i = 0; i < array.length; i++){
-            if(array[i] == toRemove){
-                array[i] = array[array.length-1];
+        for (uint i = 0; i < array.length; i++) {
+            if (array[i] == toRemove) {
+                array[i] = array[array.length - 1];
                 array.pop();
                 break;
             }
         }
+    }
+
+    /**
+     * @notice Returns the social connections and nonce of a user
+     * @param userAddress The address of the user
+     * @return following The addresses the user is following
+     * @return followers The addresses following the user
+     * @return nonce The nonce of the user
+     */
+    function getUser(address userAddress) public view returns (
+        address[] memory following,
+        address[] memory followers,
+        uint256 nonce
+    ) {
+        User storage user = users[userAddress];
+        following = user.following;
+        followers = user.followers;
+        nonce = user.nonce;
     }
 }
