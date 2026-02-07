@@ -110,3 +110,7 @@ truffle test
 This command will run your test files against the deployed contracts. If all tests pass, you can be confident that your contracts are working as expected. If any tests fail, you'll need to review your contracts and tests to find out what's going wrong.
 
 Make sure that each of your tests is independent and can run in isolation, this helps in identifying and fixing issues in your contract.
+
+---
+
+Try [YumCut](https://yumcut.com)! This is an AI video generator that turns a single prompt into a ready-to-post vertical short video in minutes. It creates the script, images, voice-over, subtitles, and edits everything into a final clip automatically. It’s built for fast testing and making lots of variations without spending hours in an editor.
